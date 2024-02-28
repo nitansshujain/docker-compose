@@ -1,28 +1,41 @@
 services:
-  rabbit:
-    image: rabbitmq:3.12-management
-    hostname: rabbitmq
+  accountsdb:
+    container_name: accountsdb
+#    This port mapping here is also not necessary (MS and DB containers will communicate, but we want to validate whether the data is saved or not by using the client application like SQLElectron.
+#    Since I am using SQLElectron, which will be outside the Docket network, so I'm exposing the traffic to the outside world with the ports like 3306,3307,3308.
     ports:
-      - "5672:5672"
-      - "15672:15672"
-    healthcheck:
-      test: rabbitmq-diagnostics check_port_connectivity
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 5s
+      - 3306:3306
+    environment:
+      MYSQL_DATABASE: accountsdb
     extends:
       file: common-config.yml
-      service: network-deploy-service
+      service: microservice-db-config
+
+  loansdb:
+    container_name: loansdb
+    ports:
+      - 3307:3306
+    environment:
+      MYSQL_DATABASE: loansdb
+    extends:
+      file: common-config.yml
+      service: microservice-db-config
+
+  cardsdb:
+    container_name: cardsdb
+    ports:
+      - 3308:3306
+    environment:
+      MYSQL_DATABASE: cardsdb
+    extends:
+      file: common-config.yml
+      service: microservice-db-config
 
   configserver:
-    image: "nitansshujain/configserver:s6"
+    image: "nitansshujain/configserver:s7"
     container_name: configserver-ms
     ports:
       - "8071:8071"
-    depends_on:
-      rabbit:
-        condition: service_healthy
     healthcheck:
       test: "curl --fail --silent localhost:8071/actuator/health/readiness | grep UP || exit 1"
       interval: 10s
@@ -34,34 +47,46 @@ services:
       service: microservice-base-config
 
   accounts:
-    image: "nitansshujain/accounts:s6"
+    image: "nitansshujain/accounts:s7"
     container_name: accounts-ms
     ports:
       - "8080:8080"
     environment:
       SPRING_APPLICATION_NAME: "accounts"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://accountsdb:3306/accountsdb"  # To connect MS with DataSource
+    depends_on:   # This depends_on will make connection with the DataSource
+      accountsdb:
+        condition: service_healthy
     extends:
       file: common-config.yml
       service: microservice-configserver-config
 
   loans:
-    image: "nitansshujain/loans:s6"
+    image: "nitansshujain/loans:s7"
     container_name: loans-ms
     ports:
       - "8090:8090"
     environment:
       SPRING_APPLICATION_NAME: "loans"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://loansdb:3306/loansdb"  # To connect MS with DataSource, notice here.. I am using 3306 as all the MSs need to be in the same network
+    depends_on: # This depends_on will make connection with the DataSource
+      loansdb:
+        condition: service_healthy
     extends:
       file: common-config.yml
       service: microservice-configserver-config
 
   cards:
-    image: "nitansshujain/cards:s6"
+    image: "nitansshujain/cards:s7"
     container_name: cards-ms
     ports:
       - "9000:9000"
     environment:
       SPRING_APPLICATION_NAME: "cards"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://cardsdb:3306/cardsdb"  # To connect MS with DataSource, notice here.. I am using 3306 as all the MSs need to be in the same network
+    depends_on: # This depends_on will make connection with the DataSource
+      cardsdb:
+        condition: service_healthy
     extends:
       file: common-config.yml
       service: microservice-configserver-config
