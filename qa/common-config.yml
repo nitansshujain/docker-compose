@@ -36,3 +36,11 @@ services:
       SPRING_DATASOURCE_USERNAME: root  # Same username and password is used for all the DataSource here
       SPRING_DATASOURCE_PASSWORD: root
 
+  microservice-eurekaserver-config:
+    extends:
+      service: microservice-configserver-config
+    depends_on:
+      eurekaserver: # All MSs depends on eurekaserver
+        condition: service_healthy
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eurekaserver:8070/eureka/  # URL details of the Eureka server
